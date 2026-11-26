@@ -150,14 +150,14 @@ export default function PreviewPanel({ previewProps, render, busy, canGenerate, 
             <motion.a
               className="btn btn-mint btn-block"
               href={render.downloadUrl}
-              download="QuizMotion-Short.mp4"
+              download={render.filename || 'QuizMotion-Short.mp4'}
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
             >
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                 <path d="M12 4v11m0 0l-4.5-4.5M12 15l4.5-4.5M5 20h14" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
-              Download Video (MP4)
+              Download Video ({render.filename?.endsWith('.webm') ? 'WEBM' : 'MP4'})
             </motion.a>
             {stale && <p className="note warn">You changed the quiz after rendering. Press “Generate again” to update the MP4.</p>}
           </motion.div>
