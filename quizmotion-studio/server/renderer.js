@@ -72,7 +72,7 @@ export async function renderQuizVideo({ props, outputLocation, onStage, onProgre
     crf: 18,
     x264Preset: 'veryfast',
     outputLocation: tmp,
-    concurrency: Math.max(1, Math.min(4, os.cpus().length - 1)),
+    concurrency: Number(process.env.RENDER_CONCURRENCY) || (process.env.NODE_ENV === 'production' ? 1 : Math.max(1, Math.min(4, os.cpus().length - 1))),
     overwrite: true,
     ...browserOptions,
     onProgress: ({ progress, stitchStage }) => {

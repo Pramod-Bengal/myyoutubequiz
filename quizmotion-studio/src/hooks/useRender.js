@@ -2,6 +2,17 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 const IDLE = { status: 'idle', progress: 0, videoUrl: null, downloadUrl: null, error: null, snapshot: null };
 
+async function readJsonSafe(res) {
+  const text = await res.text();
+  try {
+    return JSON.parse(text);
+  } catch {
+    return {
+      error: `Server returned an unexpected response (HTTP ${res.status}). It may be restarting or out of memory.`,
+    };
+  }
+}
+
 // Talks to the render server: start a job, then poll it until the MP4 is ready.
 export function useRender() {
   const [state, setState] = useState(IDLE);
@@ -17,12 +28,21 @@ export function useRender() {
   }, []);
 
   const poll = useCallback((jobId, snapshot) => {
+    let retries = 0;
     const tick = async () => {
       try {
         const res = await fetch(`/api/jobs/${jobId}`);
-        const job = await res.json();
+        const job = await readJsonSafe(res);
         if (!alive.current) return;
-        if (!res.ok) throw new Error(job.error || 'Lost track of the render job.');
+        if (!res.ok) {
+          if (res.status >= 502 && retries < 3) {
+            retries += 1;
+            timer.current = setTimeout(tick, 1500);
+            return;
+          }
+          throw new Error(job.error || 'Lost track of the render job.');
+        }
+        retries = 0;
 
         if (job.status === 'error') {
           setState({ ...IDLE, status: 'error', error: job.error || 'Rendering failed.' });
@@ -59,7 +79,7 @@ export function useRender() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(form),
         });
-        const data = await res.json().catch(() => ({}));
+        const data = await readJsonSafe(res);
         if (!res.ok) throw new Error(data.error || 'Could not start rendering.');
         poll(data.jobId, snapshot);
       } catch (err) {

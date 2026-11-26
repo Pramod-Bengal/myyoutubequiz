@@ -105,6 +105,12 @@ app.get('/api/videos/:id/download', (req, res) => {
 
 app.get('/api/health', (_req, res) => res.json({ ok: true }));
 
+// Always return JSON for /api/* errors instead of HTML.
+app.use('/api', (err, _req, res, _next) => {
+  console.error('[api error]', err);
+  res.status(err?.status || 500).json({ error: err?.message || 'Internal server error.' });
+});
+
 /* ---------------- production: serve the built website ---------------- */
 if (fs.existsSync(DIST_DIR)) {
   app.use(express.static(DIST_DIR));
