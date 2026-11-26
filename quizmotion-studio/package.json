@@ -8,7 +8,7 @@
     "dev": "concurrently -k -n api,web -c magenta,cyan \"npm:server\" \"npm:client\"",
     "server": "node server/index.js",
     "client": "vite",
-    "build": "node scripts/generate-audio.mjs && vite build",
+    "build": "node scripts/generate-audio.mjs && vite build && node scripts/prebundle-video.mjs",
     "start": "npm run build && node server/index.js",
     "studio": "remotion studio src/video/index.js"
   },

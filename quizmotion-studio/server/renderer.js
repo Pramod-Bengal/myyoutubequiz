@@ -31,8 +31,15 @@ const browserOptions = browserExecutable
   ? { browserExecutable, chromeMode: 'chrome-for-testing' }
   : {};
 
+const PREBUNDLED_DIR = path.join(ROOT, 'server', 'remotion-bundle');
+
 let bundlePromise = null;
 export function getBundle(onProgress) {
+  // Use build-time pre-bundle when available (avoids runtime webpack memory spikes).
+  if (fs.existsSync(path.join(PREBUNDLED_DIR, 'index.html'))) {
+    onProgress?.(1);
+    return Promise.resolve(PREBUNDLED_DIR);
+  }
   // The bundle only depends on the source code, so build it once and reuse it for every video.
   if (!bundlePromise) {
     bundlePromise = bundle({ entryPoint: ENTRY, onProgress: (p) => onProgress?.(p / 100) }).catch((err) => {
