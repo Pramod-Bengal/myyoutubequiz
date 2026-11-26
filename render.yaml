@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: quizmotion-studio
+    runtime: node
+    plan: free
+    rootDir: quizmotion-studio
+    buildCommand: npm install && npm run build
+    startCommand: node server/index.js
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production

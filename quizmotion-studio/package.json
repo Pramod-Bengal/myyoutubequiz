@@ -1,0 +1,39 @@
+{
+  "name": "quizmotion-studio",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "concurrently -k -n api,web -c magenta,cyan \"npm:server\" \"npm:client\"",
+    "server": "node server/index.js",
+    "client": "vite",
+    "build": "node scripts/generate-audio.mjs && vite build",
+    "start": "npm run build && node server/index.js",
+    "studio": "remotion studio src/video/index.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "private": "true",
+  "dependencies": {
+    "@fontsource/noto-sans-kannada": "5.3.0",
+    "@fontsource/sora": "5.3.0",
+    "@remotion/bundler": "4.0.547",
+    "@remotion/cli": "4.0.547",
+    "@remotion/player": "4.0.547",
+    "@remotion/renderer": "4.0.547",
+    "cors": "2.8.6",
+    "express": "5.3.0",
+    "framer-motion": "14.14.0",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "remotion": "4.0.547"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^6.3.0",
+    "concurrently": "^10.0.7",
+    "vite": "^8.3.8"
+  }
+}

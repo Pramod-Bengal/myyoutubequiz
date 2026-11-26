@@ -1,0 +1,5 @@
+node_modules
+dist
+server/renders
+public/*.wav
+*.log
