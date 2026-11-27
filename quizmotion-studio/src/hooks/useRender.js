@@ -133,6 +133,13 @@ export function useRender() {
 
       const snapshot = JSON.stringify(form);
       setState({ ...IDLE, status: 'queued', snapshot });
+
+      // On Render Free tier (512 MB RAM), skip the doomed server roundtrip so export finishes in seconds.
+      if (typeof window !== 'undefined' && window.location.hostname.endsWith('onrender.com')) {
+        await fallbackToBrowser(form, snapshot, audioCtx);
+        return;
+      }
+
       try {
         const res = await fetch('/api/render', {
           method: 'POST',

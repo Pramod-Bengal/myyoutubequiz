@@ -449,12 +449,26 @@ input[type='text']:focus, textarea:focus {
   .preview { position: static; }
   .steps, .timeline { grid-template-columns: 1fr; }
 }
-@media (max-width: 560px) {
-  .hero { padding-top: 48px; }
-  .section { padding: 56px 0; }
+@media (max-width: 640px) {
+  .container { width: min(1240px, 100% - 28px); }
+  .hero { padding: 42px 0 44px; }
+  .hero h1 { font-size: clamp(1.85rem, 7vw, 2.5rem); }
+  .hero-actions { flex-direction: column; }
+  .hero-actions .btn { width: 100%; }
+  .section { padding: 48px 0; }
+  .nav-in { height: 60px; }
+  .nav-links { gap: 12px; }
   .nav-links a:not(.nav-cta) { display: none; }
-  .qcard { padding: 20px; }
-  .preview { padding: 18px; border-radius: 24px; }
+  .studio-head { gap: 14px; margin-bottom: 24px; }
+  .studio-status { width: 100%; justify-content: space-between; }
+  .qcard { padding: 18px; border-radius: 18px; }
+  input[type='text'], textarea { font-size: 16px; padding: 11px 14px; }
+  .preview { padding: 16px; border-radius: 22px; }
+  .phone { width: min(100%, 280px); border-radius: 34px; padding: 7px; }
+  .phone-screen { border-radius: 27px; }
+  .jumps { gap: 6px; }
+  .chip { padding: 6px 11px; font-size: 0.74rem; }
+  .footer .container { flex-direction: column; align-items: center; text-align: center; }
 }
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }

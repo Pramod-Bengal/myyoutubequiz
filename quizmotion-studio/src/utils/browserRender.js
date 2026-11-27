@@ -1,9 +1,10 @@
+import { ArrayBufferTarget, Muxer } from 'mp4-muxer';
 import { C, FPS, LABELS, SCENE_FRAMES, TL, TOTAL_FRAMES } from '../video/theme.js';
 import { MUSIC_OPTIONS, formToProps } from '../video/props.js';
 
 const W = 720;
 const H = 1280;
-const S = W / 1080; // scale factor from 1080x1920 coordinates
+const S = W / 1080;
 
 function wrapText(ctx, text, maxWidth) {
   const words = String(text || '').split(/\s+/).filter(Boolean);
@@ -33,7 +34,6 @@ function drawScene(ctx, frame, props) {
   const q = props.questions[sceneIdx] || { question: '', answer: '' };
   const isLast = sceneIdx === 2;
 
-  // 1. Background
   const bg = ctx.createLinearGradient(0, 0, W * 0.4, H);
   bg.addColorStop(0, '#060920');
   bg.addColorStop(0.52, '#0E1240');
@@ -41,7 +41,6 @@ function drawScene(ctx, frame, props) {
   ctx.fillStyle = bg;
   ctx.fillRect(0, 0, W, H);
 
-  // Ambient orbs
   const orb1 = ctx.createRadialGradient(W * 0.2, H * 0.22 + Math.sin(frame / 70) * 40, 10, W * 0.2, H * 0.22, 420);
   orb1.addColorStop(0, 'rgba(139,61,255,0.42)');
   orb1.addColorStop(1, 'rgba(0,0,0,0)');
@@ -54,7 +53,6 @@ function drawScene(ctx, frame, props) {
   ctx.fillStyle = orb2;
   ctx.fillRect(0, 0, W, H);
 
-  // Subtle grid
   ctx.strokeStyle = 'rgba(201,184,255,0.045)';
   ctx.lineWidth = 1;
   const gridStep = 72;
@@ -72,14 +70,12 @@ function drawScene(ctx, frame, props) {
     ctx.stroke();
   }
 
-  // Fade out end of Scene 2
   const sceneAlpha = sceneIdx === 1 && f >= 586 ? Math.max(0, 1 - (f - 586) / 14) : 1;
   ctx.save();
   ctx.globalAlpha = sceneAlpha;
 
-  // 2. Header pill + progress dots
   ctx.save();
-  ctx.font = `700 ${28}px "Noto Sans Kannada", "Sora", sans-serif`;
+  ctx.font = '700 28px "Noto Sans Kannada", "Sora", sans-serif';
   const titleW = Math.min(W - 80, ctx.measureText(props.title).width + 80);
   const pillX = (W - titleW) / 2;
   roundRect(ctx, pillX, 74, titleW, 54, 27);
@@ -99,7 +95,6 @@ function drawScene(ctx, frame, props) {
   ctx.textBaseline = 'middle';
   ctx.fillText(props.title, W / 2 + 10, 102, titleW - 56);
 
-  // Scene dots
   for (let i = 0; i < 3; i++) {
     const dw = i === sceneIdx ? 60 : 20;
     const dx = W / 2 - 58 + i * 36 + (i > sceneIdx ? 20 : 0);
@@ -109,7 +104,6 @@ function drawScene(ctx, frame, props) {
   }
   ctx.restore();
 
-  // 3. Question Badge
   ctx.save();
   const badgeW = 240;
   roundRect(ctx, (W - badgeW) / 2, 194, badgeW, 64, 32);
@@ -138,7 +132,6 @@ function drawScene(ctx, frame, props) {
   ctx.fillText(LABELS.question, W / 2 + 26, 227);
   ctx.restore();
 
-  // 4. Question Card
   ctx.save();
   const cardX = 54;
   const cardY = 276;
@@ -164,7 +157,6 @@ function drawScene(ctx, frame, props) {
   qLines.forEach((ln, idx) => ctx.fillText(ln, W / 2, startY + idx * lineH));
   ctx.restore();
 
-  // 5. Countdown Ring (frames 120..420) or waiting state
   const stageY = 1250 * S;
   if (f < TL.reveal + 12) {
     const t = f - TL.countStart;
@@ -199,7 +191,6 @@ function drawScene(ctx, frame, props) {
     ctx.restore();
   }
 
-  // 6. Answer Reveal (Q1, Q2) or Comment CTA (Q3)
   if (f >= TL.reveal) {
     if (!isLast && q.answer) {
       ctx.save();
@@ -249,7 +240,6 @@ function drawScene(ctx, frame, props) {
 
   ctx.restore();
 
-  // 7. Single-use Wipe between Q1 -> Q2
   if (sceneIdx === 0 && f >= 566) {
     const p = Math.min(1, (f - 566) / 28);
     const y = (1 - p) * H;
@@ -267,15 +257,132 @@ function drawScene(ctx, frame, props) {
   }
 }
 
-export async function renderInBrowser(form, onProgress, existingAudioCtx = null) {
-  const props = formToProps(form);
-  const track = MUSIC_OPTIONS.find((m) => m.id === props.music);
+async function decodeAudio(file) {
+  const res = await fetch(`/${file}`);
+  const buf = await res.arrayBuffer();
+  const AC = window.OfflineAudioContext || window.AudioContext || window.webkitAudioContext;
+  const ctx = window.OfflineAudioContext ? new OfflineAudioContext(2, 44100, 44100) : new AC();
+  return ctx.decodeAudioData(buf);
+}
 
-  const canvas = document.createElement('canvas');
-  canvas.width = W;
-  canvas.height = H;
-  const ctx = canvas.getContext('2d');
+async function renderFastWebCodecs(props, track, canvas, ctx, onProgress) {
+  let audioBuffer = null;
+  if (track?.file) {
+    try {
+      audioBuffer = await decodeAudio(track.file);
+    } catch {
+      audioBuffer = null;
+    }
+  }
 
+  const videoCodec = ['avc1.4d001f', 'avc1.42001f', 'avc1.42E01E'];
+  let chosenVideo = null;
+  for (const codec of videoCodec) {
+    const sup = await VideoEncoder.isConfigSupported({ codec, width: W, height: H, bitrate: 2_800_000, framerate: FPS });
+    if (sup.supported) {
+      chosenVideo = codec;
+      break;
+    }
+  }
+  if (!chosenVideo) return null;
+
+  let hasAudio = false;
+  if (audioBuffer && typeof AudioEncoder !== 'undefined' && typeof AudioData !== 'undefined') {
+    const aSup = await AudioEncoder.isConfigSupported({
+      codec: 'mp4a.40.2',
+      sampleRate: audioBuffer.sampleRate,
+      numberOfChannels: audioBuffer.numberOfChannels,
+      bitrate: 128_000,
+    });
+    hasAudio = Boolean(aSup.supported);
+  }
+
+  const target = new ArrayBufferTarget();
+  const muxer = new Muxer({
+    target,
+    video: { codec: 'avc', width: W, height: H },
+    audio: hasAudio
+      ? { codec: 'aac', sampleRate: audioBuffer.sampleRate, numberOfChannels: audioBuffer.numberOfChannels }
+      : undefined,
+    fastStart: 'in-memory',
+  });
+
+  const videoEncoder = new VideoEncoder({
+    output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
+    error: (e) => {
+      throw e;
+    },
+  });
+  videoEncoder.configure({ codec: chosenVideo, width: W, height: H, bitrate: 2_800_000, framerate: FPS });
+
+  let audioEncoder = null;
+  if (hasAudio) {
+    audioEncoder = new AudioEncoder({
+      output: (chunk, meta) => muxer.addAudioChunk(chunk, meta),
+      error: (e) => {
+        throw e;
+      },
+    });
+    audioEncoder.configure({
+      codec: 'mp4a.40.2',
+      sampleRate: audioBuffer.sampleRate,
+      numberOfChannels: audioBuffer.numberOfChannels,
+      bitrate: 128_000,
+    });
+
+    const sr = audioBuffer.sampleRate;
+    const ch = audioBuffer.numberOfChannels;
+    const totalSamples = audioBuffer.length;
+    const chunkFrames = 1024;
+    const channels = Array.from({ length: ch }, (_, c) => audioBuffer.getChannelData(c));
+
+    for (let offset = 0; offset < totalSamples; offset += chunkFrames) {
+      const count = Math.min(chunkFrames, totalSamples - offset);
+      const planar = new Float32Array(count * ch);
+      for (let c = 0; c < ch; c++) {
+        planar.set(channels[c].subarray(offset, offset + count), c * count);
+      }
+      const ad = new AudioData({
+        format: 'f32-planar',
+        sampleRate: sr,
+        numberOfFrames: count,
+        numberOfChannels: ch,
+        timestamp: Math.round((offset * 1_000_000) / sr),
+        data: planar,
+      });
+      audioEncoder.encode(ad);
+      ad.close();
+    }
+    await audioEncoder.flush();
+  }
+
+  const frameDurUs = Math.round(1_000_000 / FPS);
+  for (let frame = 0; frame < TOTAL_FRAMES; frame++) {
+    drawScene(ctx, frame, props);
+    const vf = new VideoFrame(canvas, { timestamp: frame * frameDurUs, duration: frameDurUs });
+    videoEncoder.encode(vf, { keyFrame: frame % 60 === 0 });
+    vf.close();
+
+    if (videoEncoder.encodeQueueSize > 12) {
+      await videoEncoder.flush();
+    }
+    if (frame % 15 === 0) {
+      onProgress?.(Math.min(0.98, frame / TOTAL_FRAMES));
+      await new Promise((r) => setTimeout(r, 0));
+    }
+  }
+
+  await videoEncoder.flush();
+  videoEncoder.close();
+  audioEncoder?.close();
+  muxer.finalize();
+
+  const blob = new Blob([target.buffer], { type: 'video/mp4' });
+  const url = URL.createObjectURL(blob);
+  return { videoUrl: url, downloadUrl: url, filename: 'QuizMotion-Short.mp4' };
+}
+
+async function renderFallbackMediaRecorder(props, track, canvas, ctx, onProgress, existingAudioCtx) {
   const stream = canvas.captureStream(FPS);
   let audioCtx = existingAudioCtx;
   let audioSource = null;
@@ -297,13 +404,11 @@ export async function renderInBrowser(form, onProgress, existingAudioCtx = null)
       audioSource.buffer = decoded;
       audioSource.connect(gain);
       gain.connect(dest);
-      // Keep Chromium's WebAudio pull graph active without playing sound out of speakers during encode.
       gain.connect(silent);
       silent.connect(audioCtx.destination);
-
       dest.stream.getAudioTracks().forEach((t) => stream.addTrack(t));
     } catch {
-      /* proceed without audio if decode fails */
+      /* proceed without audio */
     }
   } else {
     audioCtx?.close().catch(() => {});
@@ -312,17 +417,10 @@ export async function renderInBrowser(form, onProgress, existingAudioCtx = null)
 
   const hasAudio = stream.getAudioTracks().length > 0;
   const candidates = hasAudio
-    ? [
-        'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
-        'video/mp4;codecs=avc1,mp4a.40.2',
-        'video/webm;codecs=vp9,opus',
-        'video/webm;codecs=vp8,opus',
-        'video/webm',
-        'video/mp4',
-      ]
+    ? ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/mp4;codecs=avc1.42E01E,mp4a.40.2', 'video/webm', 'video/mp4']
     : ['video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp9', 'video/webm'];
   const mime = candidates.find((m) => MediaRecorder.isTypeSupported(m));
-  const recorder = new MediaRecorder(stream, mime ? { mimeType: mime, videoBitsPerSecond: 3_500_000 } : undefined);
+  const recorder = new MediaRecorder(stream, mime ? { mimeType: mime, videoBitsPerSecond: 3_000_000 } : undefined);
   const chunks = [];
   recorder.ondataavailable = (e) => {
     if (e.data.size > 0) chunks.push(e.data);
@@ -362,4 +460,29 @@ export async function renderInBrowser(form, onProgress, existingAudioCtx = null)
     };
     requestAnimationFrame(step);
   });
+}
+
+export async function renderInBrowser(form, onProgress, existingAudioCtx = null) {
+  const props = formToProps(form);
+  const track = MUSIC_OPTIONS.find((m) => m.id === props.music);
+
+  const canvas = document.createElement('canvas');
+  canvas.width = W;
+  canvas.height = H;
+  const ctx = canvas.getContext('2d');
+
+  // Fast offline WebCodecs MP4 + AAC (~5-10 seconds total)
+  if (typeof VideoEncoder !== 'undefined' && typeof VideoFrame !== 'undefined') {
+    try {
+      const fast = await renderFastWebCodecs(props, track, canvas, ctx, onProgress);
+      if (fast) {
+        existingAudioCtx?.close().catch(() => {});
+        return fast;
+      }
+    } catch {
+      /* fall through to MediaRecorder */
+    }
+  }
+
+  return renderFallbackMediaRecorder(props, track, canvas, ctx, onProgress, existingAudioCtx);
 }

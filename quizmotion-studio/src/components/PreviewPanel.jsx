@@ -135,7 +135,7 @@ export default function PreviewPanel({ previewProps, render, busy, canGenerate, 
               <motion.div className="bar-fill" animate={{ width: `${Math.max(3, pct)}%` }} transition={{ ease: 'easeOut', duration: 0.5 }} />
               <span className="bar-shine" />
             </div>
-            <small>Rendering takes a few minutes. Keep this page open.</small>
+            <small>Generating your 60-second video…</small>
           </motion.div>
         )}
 
