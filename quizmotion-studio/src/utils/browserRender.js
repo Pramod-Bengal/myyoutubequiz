@@ -285,6 +285,7 @@ export async function renderInBrowser(form, onProgress) {
       const res = await fetch(`/${track.file}`);
       const buf = await res.arrayBuffer();
       audioCtx = new AudioContext();
+      if (audioCtx.state === 'suspended') await audioCtx.resume();
       const decoded = await audioCtx.decodeAudioData(buf);
       const dest = audioCtx.createMediaStreamDestination();
       audioSource = audioCtx.createBufferSource();
@@ -296,9 +297,18 @@ export async function renderInBrowser(form, onProgress) {
     }
   }
 
-  const mime = ['video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm'].find((m) =>
-    MediaRecorder.isTypeSupported(m),
-  );
+  const hasAudio = stream.getAudioTracks().length > 0;
+  const candidates = hasAudio
+    ? [
+        'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
+        'video/mp4;codecs=avc1,mp4a.40.2',
+        'video/webm;codecs=vp9,opus',
+        'video/webm;codecs=vp8,opus',
+        'video/webm',
+        'video/mp4',
+      ]
+    : ['video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp9', 'video/webm'];
+  const mime = candidates.find((m) => MediaRecorder.isTypeSupported(m));
   const recorder = new MediaRecorder(stream, mime ? { mimeType: mime, videoBitsPerSecond: 3_500_000 } : undefined);
   const chunks = [];
   recorder.ondataavailable = (e) => {

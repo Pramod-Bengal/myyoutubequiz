@@ -52,11 +52,11 @@ export default function PreviewPanel({ previewProps, render, busy, canGenerate, 
         {done && (
           <div className="tabs" role="tablist">
             <button role="tab" aria-selected={tab === 'live'} className={tab === 'live' ? 'on' : ''} onClick={() => setTab('live')}>
-              {tab === 'live' && <motion.span layoutId="previewTabPill" className="tab-pill" style={{ width: 'calc(50% - 4px)', left: 4 }} transition={{ type: 'spring', stiffness: 380, damping: 30 }} />}
+              {tab === 'live' && <motion.span layoutId="previewTabPill" className="tab-pill" transition={{ type: 'spring', stiffness: 380, damping: 30 }} />}
               <span style={{ position: 'relative', zIndex: 1 }}>Live</span>
             </button>
             <button role="tab" aria-selected={tab === 'mp4'} className={tab === 'mp4' ? 'on' : ''} onClick={() => setTab('mp4')}>
-              {tab === 'mp4' && <motion.span layoutId="previewTabPill" className="tab-pill" style={{ width: 'calc(50% - 4px)', left: '50%' }} transition={{ type: 'spring', stiffness: 380, damping: 30 }} />}
+              {tab === 'mp4' && <motion.span layoutId="previewTabPill" className="tab-pill" transition={{ type: 'spring', stiffness: 380, damping: 30 }} />}
               <span style={{ position: 'relative', zIndex: 1 }}>MP4</span>
             </button>
           </div>
@@ -66,7 +66,7 @@ export default function PreviewPanel({ previewProps, render, busy, canGenerate, 
       <div className="phone">
         <div className="phone-screen">
           {tab === 'mp4' && done ? (
-            <video key={render.videoUrl} src={render.videoUrl} controls playsInline loop autoPlay muted />
+            <video key={render.videoUrl} src={render.videoUrl} controls playsInline loop autoPlay />
           ) : (
             <Player
               ref={playerRef}
