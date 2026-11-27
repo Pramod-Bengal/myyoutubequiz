@@ -30,13 +30,20 @@ export function useRender() {
     };
   }, []);
 
-  const fallbackToBrowser = useCallback(async (form, snapshot) => {
-    if (!alive.current) return;
+  const fallbackToBrowser = useCallback(async (form, snapshot, audioCtx) => {
+    if (!alive.current) {
+      audioCtx?.close().catch(() => {});
+      return;
+    }
     setState((s) => ({ ...s, status: 'rendering', progress: 0.02, error: null }));
     try {
-      const result = await renderInBrowser(form, (p) => {
-        if (alive.current) setState((s) => ({ ...s, status: 'rendering', progress: p }));
-      });
+      const result = await renderInBrowser(
+        form,
+        (p) => {
+          if (alive.current) setState((s) => ({ ...s, status: 'rendering', progress: p }));
+        },
+        audioCtx,
+      );
       if (!alive.current) return;
       setState({
         status: 'done',
@@ -48,6 +55,7 @@ export function useRender() {
         snapshot,
       });
     } catch (err) {
+      audioCtx?.close().catch(() => {});
       if (alive.current) {
         setState({ ...IDLE, status: 'error', error: err?.message || 'Browser rendering failed.' });
       }
@@ -55,13 +63,16 @@ export function useRender() {
   }, []);
 
   const poll = useCallback(
-    (jobId, form, snapshot) => {
+    (jobId, form, snapshot, audioCtx) => {
       let retries = 0;
       const tick = async () => {
         try {
           const res = await fetch(`/api/jobs/${jobId}`);
           const job = await readJsonSafe(res);
-          if (!alive.current) return;
+          if (!alive.current) {
+            audioCtx?.close().catch(() => {});
+            return;
+          }
           if (!res.ok) {
             if (res.status >= 500 && retries < 1) {
               retries += 1;
@@ -69,7 +80,7 @@ export function useRender() {
               return;
             }
             if (res.status >= 500 || job._nonJson) {
-              await fallbackToBrowser(form, snapshot);
+              await fallbackToBrowser(form, snapshot, audioCtx);
               return;
             }
             throw new Error(job.error || 'Lost track of the render job.');
@@ -77,10 +88,12 @@ export function useRender() {
           retries = 0;
 
           if (job.status === 'error') {
+            audioCtx?.close().catch(() => {});
             setState({ ...IDLE, status: 'error', error: job.error || 'Rendering failed.' });
             return;
           }
           if (job.status === 'done') {
+            audioCtx?.close().catch(() => {});
             setState({
               status: 'done',
               progress: 1,
@@ -94,8 +107,8 @@ export function useRender() {
           }
           setState((s) => ({ ...s, status: job.status, progress: job.progress }));
           timer.current = setTimeout(tick, 800);
-        } catch (err) {
-          if (alive.current) await fallbackToBrowser(form, snapshot);
+        } catch {
+          if (alive.current) await fallbackToBrowser(form, snapshot, audioCtx);
         }
       };
       tick();
@@ -106,6 +119,18 @@ export function useRender() {
   const start = useCallback(
     async (form) => {
       clearTimeout(timer.current);
+      // Unlock AudioContext synchronously during the user click gesture so browser fallback always has audio.
+      let audioCtx = null;
+      try {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (AC) {
+          audioCtx = new AC();
+          if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
+        }
+      } catch {
+        /* ignore */
+      }
+
       const snapshot = JSON.stringify(form);
       setState({ ...IDLE, status: 'queued', snapshot });
       try {
@@ -117,17 +142,19 @@ export function useRender() {
         const data = await readJsonSafe(res);
         if (!res.ok) {
           if (res.status >= 500 || data._nonJson) {
-            await fallbackToBrowser(form, snapshot);
+            await fallbackToBrowser(form, snapshot, audioCtx);
             return;
           }
+          audioCtx?.close().catch(() => {});
           throw new Error(data.error || 'Could not start rendering.');
         }
-        poll(data.jobId, form, snapshot);
+        poll(data.jobId, form, snapshot, audioCtx);
       } catch (err) {
         if (err instanceof TypeError) {
-          await fallbackToBrowser(form, snapshot);
+          await fallbackToBrowser(form, snapshot, audioCtx);
           return;
         }
+        audioCtx?.close().catch(() => {});
         setState({ ...IDLE, status: 'error', error: err.message });
       }
     },

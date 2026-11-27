@@ -267,7 +267,7 @@ function drawScene(ctx, frame, props) {
   }
 }
 
-export async function renderInBrowser(form, onProgress) {
+export async function renderInBrowser(form, onProgress, existingAudioCtx = null) {
   const props = formToProps(form);
   const track = MUSIC_OPTIONS.find((m) => m.id === props.music);
 
@@ -277,24 +277,37 @@ export async function renderInBrowser(form, onProgress) {
   const ctx = canvas.getContext('2d');
 
   const stream = canvas.captureStream(FPS);
-  let audioCtx = null;
+  let audioCtx = existingAudioCtx;
   let audioSource = null;
 
   if (track?.file) {
     try {
       const res = await fetch(`/${track.file}`);
       const buf = await res.arrayBuffer();
-      audioCtx = new AudioContext();
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
       if (audioCtx.state === 'suspended') await audioCtx.resume();
       const decoded = await audioCtx.decodeAudioData(buf);
       const dest = audioCtx.createMediaStreamDestination();
+      const gain = audioCtx.createGain();
+      gain.gain.value = 1.0;
+      const silent = audioCtx.createGain();
+      silent.gain.value = 0;
+
       audioSource = audioCtx.createBufferSource();
       audioSource.buffer = decoded;
-      audioSource.connect(dest);
+      audioSource.connect(gain);
+      gain.connect(dest);
+      // Keep Chromium's WebAudio pull graph active without playing sound out of speakers during encode.
+      gain.connect(silent);
+      silent.connect(audioCtx.destination);
+
       dest.stream.getAudioTracks().forEach((t) => stream.addTrack(t));
     } catch {
       /* proceed without audio if decode fails */
     }
+  } else {
+    audioCtx?.close().catch(() => {});
+    audioCtx = null;
   }
 
   const hasAudio = stream.getAudioTracks().length > 0;
